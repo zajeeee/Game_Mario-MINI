@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Super Mario Bros — Platformer MVP</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #5c94fc;
+      font-family: 'JetBrains Mono', monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Sky gradient background */
+    .sky {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(180deg, #5c94fc 0%, #9bbcfc 60%, #8ec7fc 100%);
+      z-index: -1;
+    }
+
+    .clouds {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      overflow: hidden;
+    }
+    .cloud {
+      position: absolute;
+      background: rgba(255, 255, 255, 0.7);
+      border-radius: 50%;
+      filter: blur(4px);
+      animation: drift linear infinite;
+    }
+    .cloud:nth-child(1) { width: 120px; height: 60px; top: 15%; left: 10%; animation-duration: 40s; }
+    .cloud:nth-child(2) { width: 90px; height: 45px; top: 30%; left: 60%; animation-duration: 55s; animation-delay: -10s; }
+    .cloud:nth-child(3) { width: 150px; height: 70px; top: 8%; left: 70%; animation-duration: 60s; animation-delay: -30s; }
+    @keyframes drift {
+      from { transform: translateX(-200px); }
+      to   { transform: translateX(calc(100vw + 200px)); }
+    }
+
+    .game-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    /* HUD */
+    .hud {
+      display: flex;
+      gap: 1.5rem;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 0.75rem;
+      color: #fff;
+      text-shadow: 2px 2px 0 #000;
+      padding: 0.5rem 1rem;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 8px;
+      align-items: center;
+    }
+    .hud__item { display: flex; align-items: center; gap: 0.4rem; }
+    .hud__lives { color: #ff4444; }
+
+    /* Canvas */
+    canvas {
+      border: 3px solid #000;
+      border-radius: 6px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+      display: block;
+      image-rendering: pixelated;
+    }
+
+    /* Controls hint */
+    .controls {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.9);
+      text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.3);
+      text-align: center;
+      padding: 0.4rem 0.8rem;
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 6px;
+    }
+    .controls kbd {
+      display: inline-block;
+      padding: 2px 6px;
+      background: #fff;
+      color: #333;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 0.7rem;
+      box-shadow: 0 1px 0 rgba(0,0,0,0.3);
+      margin: 0 1px;
+    }
+
+    /* Overlays */
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.75);
+      color: #fff;
+      font-family: 'Press Start 2P', monospace;
+      text-align: center;
+      border-radius: 6px;
+      gap: 1rem;
+      z-index: 10;
+      overflow-y: auto;
+      padding: 1rem;
+    }
+    .overlay h1 { font-size: 1.4rem; color: #fcd000; text-shadow: 3px 3px 0 #000; }
+    .overlay p { font-size: 0.65rem; color: #ddd; line-height: 1.8; }
+    .overlay .btn {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 0.7rem;
+      padding: 0.8rem 1.5rem;
+      background: #e52521;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      border-bottom: 4px solid #a01916;
+      transition: transform 0.1s;
+    }
+    .overlay .btn:hover { transform: translateY(-2px); }
+    .overlay .btn:active { transform: translateY(1px); border-bottom-width: 2px; }
+    .overlay.hidden { display: none; }
+
+    /* HUD player-specific blocks */
+    .hud__mute {
+      background: rgba(0, 0, 0, 0.3);
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      font-size: 0.8rem;
+      cursor: pointer;
+      border-radius: 4px;
+      padding: 0.2rem 0.4rem;
+      transition: background 0.15s;
+    }
+    .hud__mute:hover { background: rgba(255, 255, 255, 0.15); }
+
+    .hud__player {
+      font-size: 0.65rem;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.25);
+    }
+    .hud__player--hidden { display: none; }
+    .hud__player-tag {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 0.5rem;
+    }
+
+    /* Game selection */
+    .game-select-grid {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .game-card {
+      width: 220px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 3px solid transparent;
+      border-radius: 12px;
+      padding: 0;
+      cursor: pointer;
+      transition: all 0.2s;
+      overflow: hidden;
+    }
+    .game-card:hover { background: rgba(255, 255, 255, 0.15); transform: scale(1.03); }
+    .game-card.selected { border-color: #fcd000; box-shadow: 0 0 20px rgba(252, 208, 0, 0.5); }
+    .game-card__thumb {
+      height: 100px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 3rem;
+    }
+    .game-card__thumb--platformer {
+      background: linear-gradient(180deg, #5c94fc 0%, #8ec7fc 70%, #3a9d3a 70%, #c84c0c 100%);
+    }
+    .game-card__icon { font-size: 3.5rem; filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.5)); }
+    .game-card__name {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 0.55rem;
+      color: #fcd000;
+      text-shadow: 2px 2px 0 #000;
+      text-align: center;
+      padding: 0.6rem 0.4rem 0.2rem;
+    }
+    .game-card__desc {
+      font-size: 0.5rem;
+      color: #aaa;
+      text-align: center;
+      padding: 0 0.4rem 0.8rem;
+      line-height: 1.4;
+    }
+
+    /* Player count selection */
+    .player-count-grid {
+      display: flex;
+      gap: 2rem;
+      justify-content: center;
+    }
+    .player-count-card {
+      width: 160px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 3px solid transparent;
+      border-radius: 12px;
+      padding: 1.2rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .player-count-card:hover {
+      background: rgba(255, 255, 255, 0.15);
+      transform: translateY(-4px);
+    }
+    .player-count-card.selected {
+      border-color: #fcd000;
+      background: rgba(252, 208, 0, 0.15);
+    }
+    .player-count-card__num {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 2.5rem;
+      color: #fff;
+      text-shadow: 3px 3px 0 #000;
+    }
+    .player-count-card__label {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 0.6rem;
+      color: #fcd000;
+      text-shadow: 2px 2px 0 #000;
+    }
+    .player-count-card__desc {
+      font-size: 0.5rem;
+      color: #aaa;
+      text-align: center;
+    }
+
+    /* Selection screens */
+    .select-title {
+      font-size: 1rem;
+      color: #fcd000;
+      text-shadow: 3px 3px 0 #000;
+      margin-bottom: 0.5rem;
+    }
+    .select-grid {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 620px;
+    }
+    .select-card {
+      width: 130px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 3px solid transparent;
+      border-radius: 8px;
+      padding: 0.8rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .select-card:hover {
+      background: rgba(255, 255, 255, 0.15);
+      transform: translateY(-4px);
+    }
+    .select-card.selected {
+      border-color: #fcd000;
+      background: rgba(252, 208, 0, 0.15);
+    }
+    .select-card__preview {
+      width: 48px;
+      height: 56px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .select-card__preview canvas {
+      border: none;
+      box-shadow: none;
+      image-rendering: pixelated;
+    }
+    .select-card__name {
+      font-size: 0.55rem;
+      color: #fff;
+      text-align: center;
+      line-height: 1.5;
+    }
+    .select-card__desc {
+      font-size: 0.45rem;
+      color: #aaa;
+      text-align: center;
+      line-height: 1.4;
+    }
+    .select-card.map-card {
+      width: 160px;
+    }
+    .map-card__thumb {
+      width: 100%;
+      height: 60px;
+      border-radius: 4px;
+      border: 2px solid rgba(255,255,255,0.2);
+    }
+    .select-actions {
+      display: flex;
+      gap: 1rem;
+      margin-top: 0.5rem;
+    }
+    .btn-secondary {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 0.65rem;
+      padding: 0.7rem 1.2rem;
+      background: #555;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      border-bottom: 4px solid #333;
+      transition: transform 0.1s;
+    }
+    .btn-secondary:hover { transform: translateY(-2px); }
+    .btn-secondary:active { transform: translateY(1px); border-bottom-width: 2px; }
+
+    /* Level map screen */
+    .level-map-grid {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 0.4rem;
+      max-width: 680px;
+      max-height: 320px;
+      overflow-y: auto;
+      padding: 0.5rem;
+    }
+    .level-node {
+      aspect-ratio: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 0.5rem;
+      color: #fff;
+      background: #333;
+      border: 2px solid #555;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: transform 0.1s, border-color 0.1s;
+      position: relative;
+    }
+    .level-node:hover { transform: translateY(-2px); }
+    .level-node--cleared {
+      background: #2d9e2d;
+      border-color: #1a7a1a;
+    }
+    .level-node--current {
+      background: #fcd000;
+      color: #000;
+      border-color: #fff;
+      box-shadow: 0 0 8px rgba(252,208,0,0.6);
+      animation: pulse 1s infinite;
+    }
+    .level-node--locked {
+      background: #222;
+      border-color: #333;
+      color: #555;
+      cursor: not-allowed;
+    }
+    .level-node--locked:hover { transform: none; }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 6px rgba(252,208,0,0.5); }
+      50% { box-shadow: 0 0 14px rgba(252,208,0,0.9); }
+    }
+
+    /* Power-up Store */
+    .store-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.6rem;
+      max-width: 580px;
+      padding: 0.5rem;
+    }
+    .store-card {
+      background: #2a2a3a;
+      border: 2px solid #555;
+      border-radius: 8px;
+      padding: 0.8rem 0.5rem;
+      text-align: center;
+      font-family: 'Press Start 2P', monospace;
+      cursor: pointer;
+      transition: transform 0.1s, border-color 0.15s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .store-card:hover { transform: translateY(-3px); border-color: #fcd000; }
+    .store-card--disabled { opacity: 0.4; cursor: not-allowed; }
+    .store-card--disabled:hover { transform: none; border-color: #555; }
+    .store-card__icon {
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.3rem;
+    }
+    .store-card__name { font-size: 0.55rem; color: #fff; }
+    .store-card__price { font-size: 0.5rem; color: #fcd000; }
+    .store-card__qty { font-size: 0.45rem; color: #88ddff; }
+    .store-card__btn {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 0.5rem;
+      padding: 0.4rem 0.8rem;
+      background: #2d9e2d;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      border-bottom: 3px solid #1a7a1a;
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+    .store-card__btn:hover { transform: translateY(-1px); }
+    .store-card__btn:active { transform: translateY(1px); border-bottom-width: 2px; }
+    .store-card__btn--disabled { background: #555; border-bottom-color: #333; cursor: not-allowed; }
+
+    /* Mobile touch controls */
+    .touch {
+      display: none;
+      gap: 1rem;
+      margin-top: 0.5rem;
+    }
+    .touch__group { display: flex; gap: 0.5rem; }
+    .touch-btn {
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      border: 2px solid #000;
+      background: rgba(255, 255, 255, 0.8);
+      font-size: 1.2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    .touch-btn:active { background: rgba(255, 255, 255, 1); }
+
+    @media (max-width: 900px) {
+      canvas { width: 100%; max-width: 100vw; height: auto; }
+    }
+    @media (pointer: coarse) {
+      .touch { display: flex; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sky"></div>
+  <div class="clouds">
+    <div class="cloud"></div>
+    <div class="cloud"></div>
+    <div class="cloud"></div>
+  </div>
+
+  <div class="game-wrapper">
+    <div class="hud">
+      <div class="hud__item">💰 <span id="coins">0</span></div>
+      <div class="hud__item">⭐ <span id="score">0</span></div>
+      <div class="hud__item">⏱️ <span id="time">300</span></div>
+      <div class="hud__item" id="cpHud">🚩 <span id="checkpoint">0/3</span></div>
+      <div class="hud__item">🗺️ <span id="levelNum">1-1</span></div>
+      <div class="hud__item" id="storeHud" style="font-size:0.6rem;"></div>
+      <div class="hud__p1 hud__player" id="hudP1">
+        <span class="hud__player-tag" style="color:#e52521;">P1</span>
+        ❤️<span id="p1Lives">3</span>
+        🍄<span id="p1Power">Small</span>
+      </div>
+      <div class="hud__p2 hud__player hud__player--hidden" id="hudP2">
+        <span class="hud__player-tag" style="color:#2d9e2d;">P2</span>
+        ❤️<span id="p2Lives">3</span>
+        🍄<span id="p2Power">Small</span>
+      </div>
+      <button class="hud__mute" id="muteBtn" title="Toggle sound">🔊</button>
+    </div>
+
+    <div style="position: relative;">
+      <canvas id="game" width="900" height="500"></canvas>
+
+      <!-- Start screen -->
+      <div class="overlay" id="startScreen">
+        <h1>SUPER GALICTO BROS</h1>
+        <p>Collect coins, stomp enemies,<br>and reach the flag!</p>
+        <p id="startHighScore" style="font-size:0.6rem;color:#fcd000;margin-top:-0.3rem;"></p>
+        <button class="btn" id="startBtn">START</button>
+      </div>
+
+      <!-- Game selection screen -->
+      <div class="overlay hidden" id="gameSelectScreen">
+        <h1 class="select-title">SELECT A GAME</h1>
+        <div class="game-select-grid">
+          <div class="game-card selected" data-game="platformer">
+            <div class="game-card__thumb game-card__thumb--platformer">
+              <div class="game-card__icon">🍄</div>
+            </div>
+            <div class="game-card__name">SUPER GALICTO BROS</div>
+            <div class="game-card__desc">Classic platformer<br>100 levels — run, jump, stomp!</div>
+          </div>
+        </div>
+        <div class="select-actions">
+          <button class="btn-secondary" id="gameSelectBackBtn">← BACK</button>
+          <button class="btn" id="gameSelectNextBtn">NEXT →</button>
+        </div>
+      </div>
+
+      <!-- Player count select screen -->
+      <div class="overlay hidden" id="playerCountScreen">
+        <h1 class="select-title">SELECT PLAYERS</h1>
+        <div class="player-count-grid">
+          <div class="player-count-card selected" data-count="1">
+            <div class="player-count-card__num">1</div>
+            <div class="player-count-card__label">PLAYER</div>
+            <div class="player-count-card__desc">Solo adventure</div>
+          </div>
+          <div class="player-count-card" data-count="2">
+            <div class="player-count-card__num">2</div>
+            <div class="player-count-card__label">PLAYERS</div>
+            <div class="player-count-card__desc">Co-op on same screen!</div>
+          </div>
+        </div>
+        <div class="select-actions">
+          <button class="btn-secondary" id="playerCountBackBtn">← BACK</button>
+          <button class="btn" id="playerCountNextBtn">NEXT →</button>
+        </div>
+      </div>
+
+      <!-- Character select screen -->
+      <div class="overlay hidden" id="charSelectScreen">
+        <h1 class="select-title" id="charSelectTitle">SELECT YOUR CHARACTER</h1>
+        <div class="select-grid" id="charGrid"></div>
+        <div class="select-actions">
+          <button class="btn-secondary" id="charBackBtn">← BACK</button>
+          <button class="btn" id="charNextBtn">NEXT →</button>
+        </div>
+      </div>
+
+      <!-- Map select screen -->
+      <div class="overlay hidden" id="mapSelectScreen">
+        <h1 class="select-title">SELECT YOUR MAP</h1>
+        <div class="select-grid" id="mapGrid"></div>
+        <div class="select-actions">
+          <button class="btn-secondary" id="mapBackBtn">← BACK</button>
+          <button class="btn" id="mapStartBtn">START! →</button>
+        </div>
+      </div>
+
+      <!-- Level map screen -->
+      <div class="overlay hidden" id="levelMapScreen">
+        <h1 class="select-title">LEVEL MAP — <span id="levelMapName"></span></h1>
+        <p id="levelMapStats" style="margin-bottom:0.8rem;"></p>
+        <div class="level-map-grid" id="levelMapGrid"></div>
+        <div class="select-actions">
+          <button class="btn-secondary" id="levelMapBackBtn">← BACK</button>
+          <button class="btn-secondary" id="levelMapStoreBtn">🛒 STORE</button>
+          <button class="btn" id="levelMapPlayBtn">PLAY LEVEL →</button>
+        </div>
+      </div>
+
+      <!-- Power-up Store screen -->
+      <div class="overlay hidden" id="storeScreen">
+        <h1 style="color:#fcd000;">🛒 POWER-UP STORE</h1>
+        <p>Coins: <span id="storeCoins" style="color:#fcd000;font-size:0.8rem;">0</span> 🪙</p>
+        <div class="store-grid" id="storeGrid"></div>
+        <div class="select-actions">
+          <button class="btn-secondary" id="storeBackBtn">← BACK</button>
+          <button class="btn" id="storePlayBtn">PLAY LEVEL →</button>
+        </div>
+      </div>
+
+      <!-- Game over screen -->
+      <div class="overlay hidden" id="gameOverScreen">
+        <h1 id="gameOverTitle">GAME OVER</h1>
+        <p id="gameOverText"></p>
+        <button class="btn" id="restartBtn">PLAY AGAIN</button>
+      </div>
+
+      <!-- Pause screen -->
+      <div class="overlay hidden" id="pauseScreen">
+        <h1 style="color:#fcd000;">PAUSED</h1>
+        <p>Press <kbd>P</kbd> or <kbd>ESC</kbd> to resume</p>
+        <div class="select-actions">
+          <button class="btn" id="resumeBtn">RESUME</button>
+          <button class="btn-secondary" id="quitBtn">QUIT TO MENU</button>
+        </div>
+      </div>
+
+      <!-- Level transition screen -->
+      <div class="overlay hidden" id="levelScreen">
+        <h1 id="levelTitle">LEVEL COMPLETE!</h1>
+        <p id="levelText"></p>
+        <button class="btn" id="nextLevelBtn">NEXT LEVEL →</button>
+      </div>
+
+    </div>
+
+    <div class="controls" id="controlsHint">
+      <span id="p1Controls">
+        <strong style="color:#e52521;">P1:</strong>
+        <kbd>←</kbd><kbd>→</kbd> or <kbd>A</kbd><kbd>D</kbd> — Move &nbsp;|&nbsp;
+        <kbd>↑</kbd> or <kbd>W</kbd> — Jump &nbsp;|&nbsp;
+        <kbd>F</kbd> or <kbd>Shift</kbd> — Shoot
+      </span>
+      <span id="p2Controls" style="display:none;">
+        &nbsp;&nbsp;&nbsp;
+        <strong style="color:#2d9e2d;">P2:</strong>
+        <kbd>J</kbd><kbd>L</kbd> — Move &nbsp;|&nbsp;
+        <kbd>I</kbd> — Jump &nbsp;|&nbsp;
+        <kbd>O</kbd> — Shoot
+      </span>
+      &nbsp;&nbsp;|&nbsp;&nbsp;Stomp enemies to defeat them &nbsp;|&nbsp; <kbd>P</kbd> or <kbd>Esc</kbd> — Pause
+      &nbsp;&nbsp;|&nbsp;&nbsp;Use store items: <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>
+      &nbsp;&nbsp;|&nbsp;&nbsp;🎮 Gamepad supported
+    </div>
+
+    <!-- Mobile touch buttons -->
+    <div class="touch">
+      <div class="touch__group">
+        <div class="touch-btn" data-key="ArrowLeft">◀</div>
+        <div class="touch-btn" data-key="ArrowRight">▶</div>
+      </div>
+      <div class="touch__group">
+        <div class="touch-btn" data-key=" ">⤴</div>
+        <div class="touch-btn" id="shootBtn">🔥</div>
+      </div>
+      <div class="touch__group touch__p2" style="display:none;">
+        <div class="touch-btn" data-key="j">◀</div>
+        <div class="touch-btn" data-key="l">▶</div>
+      </div>
+      <div class="touch__group touch__p2" style="display:none;">
+        <div class="touch-btn" data-key="i">⤴</div>
+        <div class="touch-btn" id="shootBtnP2">🔥</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
